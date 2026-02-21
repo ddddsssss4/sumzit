@@ -94,7 +94,7 @@ export function BackgroundDecoration() {
             <svg className="absolute bottom-48 right-[8%] w-40 h-40 opacity-[0.06] dark:opacity-[0.08]" viewBox="0 0 160 160" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 {[0, 1, 2, 3, 4].map(row =>
                     [0, 1, 2, 3, 4].map(col => (
-                        <circle key={`${row}-${col}`} cx={20 + col * 30} cy={20 + row * 30} r="1.5" opacity={0.3 + Math.random() * 0.5} />
+                        <circle key={`${row}-${col}`} cx={20 + col * 30} cy={20 + row * 30} r="1.5" opacity={0.3 + ((row * 5 + col) % 7) * 0.08} />
                     ))
                 )}
             </svg>
