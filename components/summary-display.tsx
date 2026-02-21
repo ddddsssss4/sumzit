@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { MermaidDiagram } from './mermaid-diagram';
 import { motion } from 'framer-motion';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Download } from 'lucide-react';
 
 interface SummaryDisplayProps {
     content: string;
@@ -19,6 +19,18 @@ interface SummaryDisplayProps {
 function extractMermaidChart(content: string): string | null {
     const match = content.match(/```mermaid\s*\n([\s\S]*?)```/);
     return match ? match[1].trim() : null;
+}
+
+function handleDownload(content: string) {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sumzit-summary-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
@@ -47,12 +59,24 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                     <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                         AI Summary
                     </span>
-                    {isLoading && (
-                        <div className="flex items-center gap-1.5 ml-auto">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
-                            <span className="text-xs text-zinc-400">Generating...</span>
-                        </div>
-                    )}
+                    <div className="flex items-center gap-2 ml-auto">
+                        {isLoading && (
+                            <div className="flex items-center gap-1.5">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                                <span className="text-xs text-zinc-400">Generating...</span>
+                            </div>
+                        )}
+                        {!isLoading && content && (
+                            <button
+                                onClick={() => handleDownload(content)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/50 transition-colors"
+                                title="Download summary as Markdown"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                Download
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Content */}
