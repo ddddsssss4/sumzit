@@ -1,31 +1,71 @@
 'use client';
 
-import { useChat, Message } from '@ai-sdk/react';
+import { useState, useCallback } from 'react';
 import { VideoForm } from '@/components/video-form';
 import { SummaryDisplay } from '@/components/summary-display';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function Home() {
-  const { messages, append, isLoading, setMessages } = useChat({
-    api: '/api/summarize',
-    onError: (error: Error) => {
-      console.error('Error generating summary:', error);
+  const [content, setContent] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(async (url: string) => {
+    setContent('');
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Something went wrong');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response stream');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process SSE events in the buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep the incomplete line in buffer
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta) {
+              setContent((prev) => prev + delta);
+            }
+          } catch {
+            // Skip malformed JSON chunks
+          }
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An error occurred';
+      setError(message);
+    } finally {
+      setIsLoading(false);
     }
-  });
-
-  const handleSubmit = async (url: string) => {
-    // Clear previous summary
-    setMessages([]);
-
-    // Append a user message to trigger the API
-    await append({
-      role: 'user',
-      content: JSON.stringify({ url }), // we send URL as stringified JSON or text
-    });
-  };
-
-  // We are interested in the assistant's response
-  const assistantMessage = messages.findLast((m: Message) => m.role === 'assistant');
+  }, []);
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans selection:bg-zinc-200 dark:selection:bg-zinc-800">
@@ -34,15 +74,25 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-32">
         <VideoForm onSubmit={handleSubmit} isLoading={isLoading} />
 
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 max-w-2xl mx-auto p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl text-red-600 dark:text-red-400 text-sm text-center"
+          >
+            {error}
+          </motion.div>
+        )}
+
         <AnimatePresence mode="wait">
-          {(assistantMessage || isLoading) && (
+          {(content || isLoading) && (
             <motion.div
               key="content-area"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <SummaryDisplay content={assistantMessage?.content || ''} />
+              <SummaryDisplay content={content} isLoading={isLoading} />
             </motion.div>
           )}
         </AnimatePresence>
