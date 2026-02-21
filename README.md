@@ -4,9 +4,9 @@
 
 <br>
 
-<div align="center">
+
  [![Watch Demo](thumbnail.png)](https://drive.google.com/file/d/1u91CvsSWJspS5rL7mI8Exx8Jv6JbTPhU/view?usp=sharing)
-</div>
+
 
 <br>
 
