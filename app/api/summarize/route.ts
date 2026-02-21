@@ -1,46 +1,17 @@
 import { NextResponse } from 'next/server';
-import { fetchTranscript } from '@/lib/youtube-transcript';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
     try {
-        const { url } = await req.json();
+        const { transcript } = await req.json();
 
-        if (!url) {
+        if (!transcript) {
             return NextResponse.json(
-                { error: 'YouTube URL is required' },
+                { error: 'Transcript is required' },
                 { status: 400 }
             );
         }
-
-        // Fetch transcript using custom Android innertube fetcher
-        let transcriptSegments;
-        try {
-            transcriptSegments = await fetchTranscript(url);
-        } catch (error: any) {
-            console.error('Error fetching transcript:', error);
-            return NextResponse.json(
-                {
-                    error:
-                        error.message ||
-                        'Could not fetch transcript for this video. It might be disabled or unavailable.',
-                },
-                { status: 400 }
-            );
-        }
-
-        if (!transcriptSegments || transcriptSegments.length === 0) {
-            return NextResponse.json(
-                { error: 'The transcript is empty.' },
-                { status: 400 }
-            );
-        }
-
-        // Combine all transcript pieces into a single text
-        const fullTranscript = transcriptSegments
-            .map((t) => t.text)
-            .join(' ');
 
         const systemPrompt = `You are a helpful and intelligent assistant. The user will provide a transcript of a YouTube video.
 Your task is to:
@@ -49,7 +20,6 @@ Your task is to:
 Please end your response with the mermaid code block wrapped in triple backticks with language identifier "mermaid". Ensure the mermaid code is valid and uses flowchart TD (or similar) as appropriate.
 Do NOT use AI slop language like "Here is a summary...". Just jump straight into the content.`;
 
-        // Call LM Studio's OpenAI-compatible chat completions endpoint with streaming
         const baseUrl =
             process.env.OPENAI_BASE_URL || 'http://127.0.0.1:1234/v1';
 
@@ -65,7 +35,7 @@ Do NOT use AI slop language like "Here is a summary...". Just jump straight into
                     { role: 'system', content: systemPrompt },
                     {
                         role: 'user',
-                        content: `Here is the transcript of the video:\n\n${fullTranscript}`,
+                        content: `Here is the transcript of the video:\n\n${transcript}`,
                     },
                 ],
                 stream: true,
@@ -82,7 +52,6 @@ Do NOT use AI slop language like "Here is a summary...". Just jump straight into
             );
         }
 
-        // Pipe the SSE stream directly back to the client
         return new Response(response.body, {
             headers: {
                 'Content-Type': 'text/event-stream',
@@ -91,7 +60,7 @@ Do NOT use AI slop language like "Here is a summary...". Just jump straight into
             },
         });
     } catch (error) {
-        console.error('API Summarize Error:', error);
+        console.error('Summarize API error:', error);
         return NextResponse.json(
             { error: 'An unexpected error occurred.' },
             { status: 500 }
