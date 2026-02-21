@@ -5,6 +5,7 @@ import { VideoForm } from '@/components/video-form';
 import { SummaryDisplay } from '@/components/summary-display';
 import { TranscriptPreview } from '@/components/transcript-preview';
 import { BackgroundDecoration } from '@/components/background-decoration';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { AnimatePresence, motion } from 'framer-motion';
 
 type Phase = 'idle' | 'fetching-transcript' | 'summarizing' | 'done';
@@ -97,6 +98,11 @@ export default function Home() {
   return (
     <main className="relative min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans selection:bg-zinc-200 dark:selection:bg-zinc-800">
       <BackgroundDecoration />
+
+      {/* Theme toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
         <VideoForm onSubmit={handleSubmit} isLoading={isLoading} />
