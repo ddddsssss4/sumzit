@@ -1,0 +1,15 @@
+services:
+  sumzit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENAI_API_KEY=lm-studio
+      # host.docker.internal lets the container reach LM Studio on the host machine
+      - OPENAI_BASE_URL=http://host.docker.internal:1234/v1
+    # Enable host.docker.internal on Linux (macOS/Windows have it by default)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
