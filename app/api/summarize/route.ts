@@ -30,29 +30,31 @@ This diagram should visualize the main flow, process, or logic discussed in the 
 CRITICAL RULES for the mermaid diagram:
 - The diagram MUST be wrapped in a fenced code block with language "mermaid"
 - Use \`flowchart TD\` syntax (top-down)
+- IMPORTANT: Create a TREE-LIKE branching structure, NOT a single straight line chain!
+- One parent node should branch into multiple child nodes where appropriate
+- Use subgraphs to group related concepts
 - Keep node labels SHORT (max 5 words per node)
 - Do NOT use parentheses inside square bracket labels
 - Do NOT use special characters like quotes or ampersands in labels
 - Use simple arrow connections: A --> B
-- Limit to 6-12 nodes maximum for readability
+- Use 8-15 nodes for a rich, informative diagram
 - The diagram MUST be valid mermaid syntax
 
-Example format of your response:
-## Video Title Topic
-
-### Key Points
-- Point 1
-- Point 2
-
-### Details
-...content...
-
+Example of a GOOD tree-like diagram:
 \`\`\`mermaid
 flowchart TD
-    A[Start Topic] --> B[Step One]
-    B --> C[Step Two]
-    C --> D[Final Result]
+    A[Main Topic] --> B[Branch One]
+    A --> C[Branch Two]
+    A --> D[Branch Three]
+    B --> B1[Sub Point 1]
+    B --> B2[Sub Point 2]
+    C --> C1[Detail A]
+    C --> C2[Detail B]
+    D --> D1[Outcome]
 \`\`\`
+
+Example of a BAD straight-line diagram (DO NOT do this):
+A --> B --> C --> D --> E --> F
 
 Do NOT skip the mermaid diagram. It is REQUIRED.
 Do NOT use filler phrases like "Here is a summary". Jump straight into the content.`;
