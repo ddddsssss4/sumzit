@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { YoutubeTranscript } from 'youtube-transcript';
+import { fetchTranscript } from '@/lib/youtube-transcript';
 
 export const maxDuration = 60;
 
@@ -14,22 +14,23 @@ export async function POST(req: Request) {
             );
         }
 
-        // Fetch transcript
-        let transcriptData;
+        // Fetch transcript using custom Android innertube fetcher
+        let transcriptSegments;
         try {
-            transcriptData = await YoutubeTranscript.fetchTranscript(url);
-        } catch (error) {
+            transcriptSegments = await fetchTranscript(url);
+        } catch (error: any) {
             console.error('Error fetching transcript:', error);
             return NextResponse.json(
                 {
                     error:
+                        error.message ||
                         'Could not fetch transcript for this video. It might be disabled or unavailable.',
                 },
                 { status: 400 }
             );
         }
 
-        if (!transcriptData || transcriptData.length === 0) {
+        if (!transcriptSegments || transcriptSegments.length === 0) {
             return NextResponse.json(
                 { error: 'The transcript is empty.' },
                 { status: 400 }
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
         }
 
         // Combine all transcript pieces into a single text
-        const fullTranscript = transcriptData
+        const fullTranscript = transcriptSegments
             .map((t) => t.text)
             .join(' ');
 
@@ -68,7 +69,7 @@ Do NOT use AI slop language like "Here is a summary...". Just jump straight into
                     },
                 ],
                 stream: true,
-                temperature: 0.7
+                temperature: 0.7,
             }),
         });
 
