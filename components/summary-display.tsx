@@ -12,13 +12,24 @@ interface SummaryDisplayProps {
     isLoading: boolean;
 }
 
+/**
+ * Extract mermaid chart code from the full content string.
+ * Returns null if no complete mermaid block is found.
+ */
+function extractMermaidChart(content: string): string | null {
+    const match = content.match(/```mermaid\s*\n([\s\S]*?)```/);
+    return match ? match[1].trim() : null;
+}
+
 export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
-    // Check if mermaid code block is fully received (not still streaming in)
-    const mermaidBlockComplete = useMemo(() => {
-        // Match ```mermaid ... ``` with content between
-        const mermaidRegex = /```mermaid\s*\n([\s\S]*?)```/;
-        return mermaidRegex.test(content);
-    }, [content]);
+    // Extract mermaid chart separately for direct rendering
+    const mermaidChart = useMemo(() => extractMermaidChart(content), [content]);
+
+    // Strip the mermaid block from the content so ReactMarkdown doesn't also try to render it
+    const contentWithoutMermaid = useMemo(() => {
+        if (!mermaidChart) return content;
+        return content.replace(/```mermaid\s*\n[\s\S]*?```/, '').trim();
+    }, [content, mermaidChart]);
 
     return (
         <motion.div
@@ -69,18 +80,9 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                                         const codeContent = String(children).replace(/\n$/, '');
                                         const isInline = !match && !codeContent.includes('\n');
 
+                                        // Don't render mermaid blocks via ReactMarkdown - we handle them separately below
                                         if (!isInline && language === 'mermaid') {
-                                            // While streaming, wait for block to complete before rendering
-                                            if (isLoading && !mermaidBlockComplete) {
-                                                return (
-                                                    <div className="my-6 flex items-center gap-2 text-zinc-400 text-sm">
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                        Building diagram...
-                                                    </div>
-                                                );
-                                            }
-                                            // Once streaming is done or block is complete, render it
-                                            return <MermaidDiagram chart={codeContent} />;
+                                            return null;
                                         }
 
                                         return !isInline ? (
@@ -99,6 +101,10 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                                                 {children}
                                             </code>
                                         );
+                                    },
+                                    // Prevent ReactMarkdown from wrapping code blocks in <pre>
+                                    pre({ children }) {
+                                        return <>{children}</>;
                                     },
                                     h1: ({ children }) => (
                                         <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-6 pb-4 border-b border-zinc-200 dark:border-zinc-800">
@@ -177,8 +183,28 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                                     ),
                                 }}
                             >
-                                {content}
+                                {contentWithoutMermaid}
                             </ReactMarkdown>
+
+                            {/* Render mermaid diagram DIRECTLY — extracted from content */}
+                            {mermaidChart && !isLoading && (
+                                <MermaidDiagram chart={mermaidChart} />
+                            )}
+
+                            {/* Show building state while streaming and mermaid block is being received */}
+                            {isLoading && content.includes('```mermaid') && !mermaidChart && (
+                                <div className="my-6 flex items-center gap-2 text-zinc-400 text-sm">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Building diagram...
+                                </div>
+                            )}
+
+                            {isLoading && !content.includes('```mermaid') && (
+                                <div className="flex items-center gap-2 mt-4 text-zinc-400">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span className="text-sm">Generating...</span>
+                                </div>
+                            )}
                         </article>
                     )}
                 </div>

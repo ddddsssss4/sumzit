@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useId } from 'react';
+import React, { useEffect, useState } from 'react';
 import mermaid from 'mermaid';
 import { AlertTriangle, Code2 } from 'lucide-react';
 
@@ -8,121 +8,97 @@ interface MermaidDiagramProps {
     chart: string;
 }
 
+// Initialize mermaid ONCE at module level (not inside useEffect)
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    securityLevel: 'loose',
+    fontFamily: 'inherit',
+    flowchart: {
+        htmlLabels: true,
+        useMaxWidth: true,
+    },
+    er: {
+        useMaxWidth: true,
+    },
+});
+
 /**
- * Sanitize common LLM-generated Mermaid syntax issues:
- * 1. Parentheses inside square bracket labels: [CDN (fast)] → ["CDN (fast)"]
- * 2. Double qualifiers in erDiagram: PK FK → FK
- * 3. SQL constraint syntax: PRIMARY KEY (a,b) → removed
+ * Sanitize mermaid chart content to fix common LLM syntax issues
  */
-function sanitizeMermaidSyntax(input: string): string {
-    let chart = input;
+function sanitizeMermaidChart(chart: string): string {
+    let clean = chart
+        .trim()
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '  ')
+        .replace(/\r\n/g, '\n');
 
-    // Fix square bracket labels containing parentheses — quote them
-    // e.g. [CDN (fast)] → ["CDN (fast)"]
-    chart = chart.replace(
-        /\[([^\]]*\([^)]*\)[^\]]*)\]/g,
-        (_, content) => `["${content.replace(/"/g, '')}"]`,
-    );
+    // Fix node labels with parentheses inside square brackets
+    // e.g., A[Content Delivery Network (CDN)] -> A["Content Delivery Network (CDN)"]
+    clean = clean.replace(/\[([^\]]*\([^\]]*\)[^\]]*)\]/g, (match, content) => {
+        if (content.startsWith('"') && content.endsWith('"')) {
+            return match;
+        }
+        return `["${content}"]`;
+    });
 
-    // Fix double qualifiers in erDiagram (PK FK → FK)
-    chart = chart.replace(/\bPK\s+FK\b/g, 'FK');
-    chart = chart.replace(/\bFK\s+PK\b/g, 'FK');
+    // Fix erDiagram attributes with multiple qualifiers (PK FK together is invalid)
+    clean = clean.replace(/(\w+\s+\w+)\s+PK\s+FK/g, '$1 FK');
 
-    // Remove SQL constraint syntax (PRIMARY KEY(...), FOREIGN KEY(...), etc.)
-    chart = chart.replace(/(?:PRIMARY|FOREIGN)\s+KEY\s*\([^)]*\)/gi, '');
-
-    // Remove UNIQUE constraint syntax
-    chart = chart.replace(/\bUNIQUE\s*\([^)]*\)/gi, '');
-
-    // Clean up any double-quoted labels that might already be quoted
-    chart = chart.replace(/\[""+/g, '["');
-    chart = chart.replace(/""+\]/g, '"]');
-
-    return chart;
+    return clean;
 }
 
-let mermaidInitialized = false;
-
 export function MermaidDiagram({ chart }: MermaidDiagramProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [svg, setSvg] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
+    const [svg, setSvg] = useState<string>('');
     const [showSource, setShowSource] = useState(false);
-    const uniqueId = useId().replace(/:/g, '_');
 
     useEffect(() => {
-        if (!mermaidInitialized) {
-            const isDark =
-                typeof window !== 'undefined' &&
-                window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-            mermaid.initialize({
-                startOnLoad: false,
-                theme: isDark ? 'dark' : 'base',
-                themeVariables: isDark
-                    ? {
-                        fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
-                        primaryColor: '#27272a',
-                        primaryTextColor: '#fafafa',
-                        primaryBorderColor: '#3f3f46',
-                        lineColor: '#71717a',
-                        secondaryColor: '#18181b',
-                        tertiaryColor: '#09090b',
-                    }
-                    : {
-                        fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
-                        primaryColor: '#f4f4f5',
-                        primaryTextColor: '#18181b',
-                        primaryBorderColor: '#e4e4e7',
-                        lineColor: '#a1a1aa',
-                        secondaryColor: '#fafafa',
-                        tertiaryColor: '#fff',
-                    },
-                securityLevel: 'loose',
-                flowchart: { curve: 'basis', padding: 16 },
-            });
-            mermaidInitialized = true;
-        }
-
         const renderChart = async () => {
-            if (!containerRef.current || !chart.trim()) return;
+            if (!chart || !chart.trim()) {
+                setError('No diagram content');
+                return;
+            }
+
+            const cleanChart = sanitizeMermaidChart(chart);
+            console.log('[Mermaid] Rendering chart:', cleanChart.substring(0, 200));
 
             try {
+                const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const { svg: renderedSvg } = await mermaid.render(id, cleanChart);
+                setSvg(renderedSvg);
                 setError(null);
-                setSvg('');
+            } catch (err) {
+                console.error('[Mermaid] Render error:', err);
+                console.error('[Mermaid] Failed chart:\n', cleanChart);
 
-                const sanitized = sanitizeMermaidSyntax(chart);
-                const id = `mermaid_${uniqueId}_${Date.now()}`;
-
-                const { svg: svgResult } = await mermaid.render(id, sanitized);
-                setSvg(svgResult);
-            } catch (err: any) {
-                console.error('Mermaid rendering error:', err);
-
-                // Try a second time with even more aggressive cleanup
+                // Try fallback: strip parentheses from node labels
                 try {
-                    let fallbackChart = sanitizeMermaidSyntax(chart);
-                    // Strip all parentheses content as last resort
-                    fallbackChart = fallbackChart.replace(/\(([^)]*)\)/g, '');
-                    const fallbackId = `mermaid_fb_${uniqueId}_${Date.now()}`;
-                    const { svg: svgResult } = await mermaid.render(
+                    const fallbackChart = cleanChart.replace(
+                        /\[([^\]]+)\]/g,
+                        (match, content) => {
+                            const cleaned = content.replace(/\s*\([^)]*\)/g, '');
+                            return `[${cleaned}]`;
+                        },
+                    );
+                    console.log('[Mermaid] Trying fallback chart');
+                    const fallbackId = `mermaid-fallback-${Date.now()}`;
+                    const { svg: fallbackSvg } = await mermaid.render(
                         fallbackId,
                         fallbackChart,
                     );
-                    setSvg(svgResult);
-                } catch {
+                    setSvg(fallbackSvg);
+                    setError(null);
+                } catch (fallbackErr) {
                     setError(
-                        err?.message ||
-                        'Failed to render diagram. The AI generated invalid Mermaid syntax.',
+                        err instanceof Error ? err.message : 'Failed to render diagram',
                     );
                 }
             }
         };
 
-        // Small delay for streaming — don't render incomplete charts
-        const timeout = setTimeout(renderChart, 200);
-        return () => clearTimeout(timeout);
-    }, [chart, uniqueId]);
+        renderChart();
+    }, [chart]);
 
     if (error) {
         return (
@@ -130,7 +106,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-amber-200/40 dark:border-amber-500/10">
                     <AlertTriangle className="w-4 h-4 text-amber-500" />
                     <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                        Diagram could not be rendered
+                        Diagram Error
                     </span>
                     <button
                         onClick={() => setShowSource(!showSource)}
@@ -140,8 +116,11 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
                         {showSource ? 'Hide source' : 'View source'}
                     </button>
                 </div>
+                <p className="px-4 py-2 text-xs text-amber-600/80 dark:text-amber-400/60">
+                    {error}
+                </p>
                 {showSource && (
-                    <pre className="p-4 text-xs text-amber-900/70 dark:text-amber-200/60 overflow-x-auto font-mono leading-relaxed">
+                    <pre className="px-4 pb-4 text-xs text-amber-900/70 dark:text-amber-200/60 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
                         {chart}
                     </pre>
                 )}
@@ -150,18 +129,17 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     }
 
     if (!svg) {
-        return null;
+        return (
+            <div className="my-6 flex items-center justify-center p-8 rounded-xl bg-zinc-100/50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700">
+                <p className="text-zinc-400 text-sm">Loading diagram...</p>
+            </div>
+        );
     }
 
     return (
         <div
-            ref={containerRef}
-            className="my-8 flex justify-center w-full max-w-full overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 p-6 shadow-sm"
-        >
-            <div
-                dangerouslySetInnerHTML={{ __html: svg }}
-                className="w-full h-auto flex items-center justify-center [&>svg]:max-w-full [&>svg]:h-auto"
-            />
-        </div>
+            className="my-8 flex justify-center p-6 rounded-xl overflow-x-auto border border-zinc-200 dark:border-zinc-700/50 bg-zinc-50 dark:bg-zinc-800/30"
+            dangerouslySetInnerHTML={{ __html: svg }}
+        />
     );
 }
