@@ -36,9 +36,8 @@ export async function POST(req: Request) {
             );
         }
 
-        // Combine transcript pieces into a single text (cap at ~500 items)
+        // Combine all transcript pieces into a single text
         const fullTranscript = transcriptData
-            .slice(0, 500)
             .map((t) => t.text)
             .join(' ');
 
@@ -69,8 +68,7 @@ Do NOT use AI slop language like "Here is a summary...". Just jump straight into
                     },
                 ],
                 stream: true,
-                temperature: 0.7,
-                max_tokens: 4096,
+                temperature: 0.7
             }),
         });
 
