@@ -2,30 +2,32 @@
 
 import React, { useEffect, useState } from 'react';
 import mermaid from 'mermaid';
-import { AlertTriangle, Code2 } from 'lucide-react';
+import { AlertTriangle, Code2, Sun, Moon } from 'lucide-react';
 
 interface MermaidDiagramProps {
     chart: string;
 }
 
-// Initialize mermaid ONCE at module level (not inside useEffect)
-mermaid.initialize({
-    startOnLoad: false,
-    theme: 'dark',
-    securityLevel: 'loose',
-    fontFamily: 'inherit',
-    flowchart: {
-        htmlLabels: true,
-        useMaxWidth: true,
-    },
-    er: {
-        useMaxWidth: true,
-    },
-});
+function initMermaid(isDark: boolean) {
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: isDark ? 'dark' : 'default',
+        securityLevel: 'loose',
+        fontFamily: 'inherit',
+        flowchart: {
+            htmlLabels: true,
+            useMaxWidth: true,
+            curve: 'basis',
+        },
+        er: {
+            useMaxWidth: true,
+        },
+    });
+}
 
-/**
- * Sanitize mermaid chart content to fix common LLM syntax issues
- */
+// Initialize with dark theme by default
+initMermaid(true);
+
 function sanitizeMermaidChart(chart: string): string {
     let clean = chart
         .trim()
@@ -33,16 +35,11 @@ function sanitizeMermaidChart(chart: string): string {
         .replace(/\\t/g, '  ')
         .replace(/\r\n/g, '\n');
 
-    // Fix node labels with parentheses inside square brackets
-    // e.g., A[Content Delivery Network (CDN)] -> A["Content Delivery Network (CDN)"]
     clean = clean.replace(/\[([^\]]*\([^\]]*\)[^\]]*)\]/g, (match, content) => {
-        if (content.startsWith('"') && content.endsWith('"')) {
-            return match;
-        }
+        if (content.startsWith('"') && content.endsWith('"')) return match;
         return `["${content}"]`;
     });
 
-    // Fix erDiagram attributes with multiple qualifiers (PK FK together is invalid)
     clean = clean.replace(/(\w+\s+\w+)\s+PK\s+FK/g, '$1 FK');
 
     return clean;
@@ -52,6 +49,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     const [error, setError] = useState<string | null>(null);
     const [svg, setSvg] = useState<string>('');
     const [showSource, setShowSource] = useState(false);
+    const [isDark, setIsDark] = useState(true);
 
     useEffect(() => {
         const renderChart = async () => {
@@ -59,6 +57,9 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
                 setError('No diagram content');
                 return;
             }
+
+            // Re-initialize mermaid with the current theme
+            initMermaid(isDark);
 
             const cleanChart = sanitizeMermaidChart(chart);
             console.log('[Mermaid] Rendering chart:', cleanChart.substring(0, 200));
@@ -70,9 +71,7 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
                 setError(null);
             } catch (err) {
                 console.error('[Mermaid] Render error:', err);
-                console.error('[Mermaid] Failed chart:\n', cleanChart);
 
-                // Try fallback: strip parentheses from node labels
                 try {
                     const fallbackChart = cleanChart.replace(
                         /\[([^\]]+)\]/g,
@@ -81,24 +80,18 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
                             return `[${cleaned}]`;
                         },
                     );
-                    console.log('[Mermaid] Trying fallback chart');
-                    const fallbackId = `mermaid-fallback-${Date.now()}`;
-                    const { svg: fallbackSvg } = await mermaid.render(
-                        fallbackId,
-                        fallbackChart,
-                    );
+                    const fallbackId = `mermaid-fb-${Date.now()}`;
+                    const { svg: fallbackSvg } = await mermaid.render(fallbackId, fallbackChart);
                     setSvg(fallbackSvg);
                     setError(null);
-                } catch (fallbackErr) {
-                    setError(
-                        err instanceof Error ? err.message : 'Failed to render diagram',
-                    );
+                } catch {
+                    setError(err instanceof Error ? err.message : 'Failed to render diagram');
                 }
             }
         };
 
         renderChart();
-    }, [chart]);
+    }, [chart, isDark]);
 
     if (error) {
         return (
@@ -137,9 +130,36 @@ export function MermaidDiagram({ chart }: MermaidDiagramProps) {
     }
 
     return (
-        <div
-            className="my-8 flex justify-center p-6 rounded-xl overflow-x-auto border border-zinc-200 dark:border-zinc-700/50 bg-zinc-50 dark:bg-zinc-800/30"
-            dangerouslySetInnerHTML={{ __html: svg }}
-        />
+        <div className="my-8 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700/50">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-4 py-2 bg-zinc-100 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700/50">
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Flowchart</span>
+                <button
+                    onClick={() => setIsDark(!isDark)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/50 transition-colors"
+                    title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                    {isDark ? (
+                        <>
+                            <Sun className="w-3.5 h-3.5" />
+                            Light
+                        </>
+                    ) : (
+                        <>
+                            <Moon className="w-3.5 h-3.5" />
+                            Dark
+                        </>
+                    )}
+                </button>
+            </div>
+            {/* Diagram */}
+            <div
+                className={`flex justify-center p-6 overflow-x-auto transition-colors ${isDark
+                        ? 'bg-zinc-900'
+                        : 'bg-white'
+                    }`}
+                dangerouslySetInnerHTML={{ __html: svg }}
+            />
+        </div>
     );
 }
