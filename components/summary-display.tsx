@@ -13,16 +13,12 @@ interface SummaryDisplayProps {
 }
 
 export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
-    // Check if a mermaid code block is complete (has closing ```)
-    const hasMermaidBlock = content.includes('```mermaid');
+    // Check if mermaid code block is fully received (not still streaming in)
     const mermaidBlockComplete = useMemo(() => {
-        if (!hasMermaidBlock) return false;
-        const mermaidStart = content.indexOf('```mermaid');
-        const afterStart = content.indexOf('\n', mermaidStart);
-        if (afterStart === -1) return false;
-        const closingBackticks = content.indexOf('```', afterStart + 1);
-        return closingBackticks !== -1;
-    }, [content, hasMermaidBlock]);
+        // Match ```mermaid ... ``` with content between
+        const mermaidRegex = /```mermaid\s*\n([\s\S]*?)```/;
+        return mermaidRegex.test(content);
+    }, [content]);
 
     return (
         <motion.div
@@ -74,8 +70,8 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                                         const isInline = !match && !codeContent.includes('\n');
 
                                         if (!isInline && language === 'mermaid') {
-                                            // Only render mermaid if the block is complete
-                                            if (!mermaidBlockComplete) {
+                                            // While streaming, wait for block to complete before rendering
+                                            if (isLoading && !mermaidBlockComplete) {
                                                 return (
                                                     <div className="my-6 flex items-center gap-2 text-zinc-400 text-sm">
                                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -83,6 +79,7 @@ export function SummaryDisplay({ content, isLoading }: SummaryDisplayProps) {
                                                     </div>
                                                 );
                                             }
+                                            // Once streaming is done or block is complete, render it
                                             return <MermaidDiagram chart={codeContent} />;
                                         }
 
